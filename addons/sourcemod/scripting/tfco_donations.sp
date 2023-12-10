@@ -6,7 +6,7 @@
 #include <sdkhooks>
 #include <ripext>
 
-#define PLUGIN_VERSION	"1.0.0"
+#define PLUGIN_VERSION	"1.0.1"
 
 #define TFCONNECT_TAG	"\x01[\x079E3083TFConnect\x01] "
 
@@ -42,7 +42,10 @@ enum struct DonationData
 	
 	bool InitFromJSON(JSONObject data)
 	{
-		data.GetString("name", this.name, sizeof(this.name));
+		if (!data.GetString("name", this.name, sizeof(this.name)))
+			strcopy(this.name, sizeof(this.name), "Anonymous");
+		
+		data.GetString("message", this.message, sizeof(this.message));
 		
 		this.cents_amount = data.GetInt("cents_amount");
 		
@@ -71,7 +74,7 @@ public void OnPluginStart()
 	sm_tfco_donation_request_interval = CreateConVar("sm_tfco_donation_request_interval", "10.0");
 	tf_player_drop_bonus_ducks = FindConVar("tf_player_drop_bonus_ducks");
 	
-	RegAdminCmd("sm_tfco_test_donation", ConCmd_TestDonation, ADMFLAG_CHEATS);
+	RegAdminCmd("sm_tfco_test_donation", HandleCommand_TestDonation, ADMFLAG_CHEATS);
 	
 	g_iLastCheckedTimestamp = GetTime();
 }
@@ -101,25 +104,6 @@ public void OnConfigsExecuted()
 	}
 }
 
-void TogglePlugin(bool bEnable)
-{
-	if (bEnable)
-	{
-		AddNormalSoundHook(NormalSoundHook);
-		ServerCommand("script_execute %s", DONATION_SCRIPT_FILE);
-		tf_player_drop_bonus_ducks.IntValue = 1;
-		g_hRequestTimer = CreateTimer(sm_tfco_donation_request_interval.FloatValue, Timer_RequestDonations, _, TIMER_REPEAT);
-	}
-	else
-	{
-		RemoveNormalSoundHook(NormalSoundHook);
-		tf_player_drop_bonus_ducks.RestoreDefault();
-		g_hRequestTimer = null;
-	}
-	
-	g_bEnabled = bEnable;
-}
-
 public void OnEntityCreated(int entity, const char[] classname)
 {
 	if (!g_bEnabled)
@@ -131,12 +115,85 @@ public void OnEntityCreated(int entity, const char[] classname)
 	}
 }
 
+void TogglePlugin(bool bEnable)
+{
+	if (bEnable)
+	{
+		AddNormalSoundHook(OnSoundPlayed);
+		ServerCommand("script_execute %s", DONATION_SCRIPT_FILE);
+		HookEvent("teamplay_round_start", OnGameEvent_teamplay_round_start);
+		
+		tf_player_drop_bonus_ducks.IntValue = 1;
+		
+		g_hRequestTimer = CreateTimer(sm_tfco_donation_request_interval.FloatValue, Timer_RequestDonations, _, TIMER_REPEAT);
+		TriggerTimer(g_hRequestTimer);
+	}
+	else
+	{
+		RemoveNormalSoundHook(OnSoundPlayed);
+		
+		tf_player_drop_bonus_ducks.RestoreDefault();
+		
+		g_hRequestTimer = null;
+	}
+	
+	g_bEnabled = bEnable;
+}
+
+int FormatMoney(float amount, char[] buffer, int maxlength)
+{
+	char szAmount[16], szFormatted[16], szDecimal[16];
+	Format(szAmount, sizeof(szAmount), "%.2f", amount);
+	
+	int iDecimalPos = StrContains(szAmount, ".");
+	if (iDecimalPos != -1)
+	{
+		strcopy(szDecimal, sizeof(szDecimal), szAmount[iDecimalPos]);
+		szAmount[iDecimalPos] = EOS;
+	}
+	else
+	{
+		szDecimal[0] = EOS;
+	}
+	
+	while (strlen(szAmount) > 3)
+	{
+		char szLastThree[4];
+		strcopy(szLastThree, sizeof(szLastThree), szAmount[strlen(szAmount) - 3]);
+		Format(szFormatted, sizeof(szFormatted), ",%s%s", szLastThree, szFormatted);
+		szAmount[strlen(szAmount) - 3] = EOS;
+	}
+	
+	return Format(buffer, maxlength, "$%s%s%s", szAmount, szFormatted, szDecimal);
+}
+
+void OnDonationReceived(DonationData donation)
+{
+	char szAmount[16], szTotal[16];
+	FormatMoney(donation.cents_amount / 100.0, szAmount, sizeof(szAmount));
+	FormatMoney(g_nRaisedCents / 100.0, szTotal, sizeof(szTotal));
+	
+	PrintToChatAll(TFCONNECT_TAG ... "\aE1C5F1%s \x01has donated \a3EFF3E%s\x01. The total amount raised is now \a3EFF3E%s\x01!", donation.name, szAmount, szTotal);
+	
+	if (donation.message[0] != EOS)
+		PrintToChatAll("\aE1C5F1%s: \x01\"%s\"", donation.name, donation.message);
+}
+
+void UpdateDonationDisplays(char[] message)
+{
+	char szScriptCode[256];
+	Format(szScriptCode, sizeof(szScriptCode), "UpdateDonationDisplays(\"%s\")", message);
+	
+	SetVariantString(szScriptCode);
+	AcceptEntityInput(0, "RunScriptCode");
+}
+
 static void OnDuckSpawnPost(int entity)
 {
 	SetEntityModel(entity, CROAKER_MODEL);
 }
 
-static Action NormalSoundHook(int clients[MAXPLAYERS], int &numClients, char sample[PLATFORM_MAX_PATH], int &entity, int &channel, float &volume, int &level, int &pitch, int &flags, char soundEntry[PLATFORM_MAX_PATH], int &seed)
+static Action OnSoundPlayed(int clients[MAXPLAYERS], int &numClients, char sample[PLATFORM_MAX_PATH], int &entity, int &channel, float &volume, int &level, int &pitch, int &flags, char soundEntry[PLATFORM_MAX_PATH], int &seed)
 {
 	if (strncmp(sample, ")ambient_mp3/bumper_car_quack", 29) == 0)
 	{
@@ -152,7 +209,7 @@ static Action Timer_RequestDonations(Handle timer)
 	if (g_hRequestTimer != timer)
 		return Plugin_Stop;
 	
-	// Query the campaign first.
+	// Query the campaign details first.
 	// Once that succeeds, we know that we can fetch current donations and goals.
 	HTTPRequest request = new HTTPRequest(CAMPAIGN_API_URL);
 	request.Get(OnCampaignGetRequest);
@@ -160,6 +217,7 @@ static Action Timer_RequestDonations(Handle timer)
 	return Plugin_Continue;
 }
 
+// /api/campaigns/active
 static void OnCampaignGetRequest(HTTPResponse response, any value)
 {
 	if (!g_bEnabled)
@@ -167,7 +225,7 @@ static void OnCampaignGetRequest(HTTPResponse response, any value)
 	
 	if (response.Status != HTTPStatus_OK)
 	{
-		LogError("GET request failed with status %d", response.Status);
+		LogError("OnCampaignGetRequest: Failed with status %d", response.Status);
 		return;
 	}
 	
@@ -179,16 +237,15 @@ static void OnCampaignGetRequest(HTTPResponse response, any value)
 	if (sm_tfco_donation_debug.BoolValue)
 	{
 		char title[256];
-		data.GetString("title", title, sizeof(title));
-		
-		LogMessage("Retrieved campaign details for '%s': %d / %d raised", title, raised_cents, goal_cents);
+		if (data.GetString("title", title, sizeof(title)))
+			LogMessage("Retrieved campaign details for '%s': %d / %d raised", title, raised_cents, goal_cents);
 	}
 	
 	if (raised_cents != g_nRaisedCents)
 	{
 		g_nRaisedCents = raised_cents;
 		
-		char message[64];
+		char message[16];
 		if (FormatMoney(raised_cents / 100.0, message, sizeof(message)))
 			UpdateDonationDisplays(message);
 	}
@@ -199,15 +256,7 @@ static void OnCampaignGetRequest(HTTPResponse response, any value)
 	request.Get(OnDonationGetRequest);
 }
 
-void UpdateDonationDisplays(char[] message)
-{
-	char szScriptCode[256];
-	Format(szScriptCode, sizeof(szScriptCode), "UpdateDonationDisplays(\"%s\")", message);
-	
-	SetVariantString(szScriptCode);
-	AcceptEntityInput(0, "RunScriptCode");
-}
-
+// /api/campaigns/active/donations
 static void OnDonationGetRequest(HTTPResponse response, any value)
 {
 	if (!g_bEnabled)
@@ -215,7 +264,7 @@ static void OnDonationGetRequest(HTTPResponse response, any value)
 	
 	if (response.Status != HTTPStatus_OK)
 	{
-		LogError("GET request failed with status %d", response.Status);
+		LogError("OnDonationGetRequest: Failed with status %d", response.Status);
 		return;
 	}
 	
@@ -247,17 +296,7 @@ static void OnDonationGetRequest(HTTPResponse response, any value)
 	}
 }
 
-static void OnDonationReceived(DonationData donation)
-{
-	char szAmount[16], szTotal[16];
-	FormatMoney(donation.cents_amount / 100.0, szAmount, sizeof(szAmount));
-	FormatMoney(g_nRaisedCents / 100.0, szTotal, sizeof(szTotal));
-	
-	PrintToChatAll(TFCONNECT_TAG ... "\aE1C5F1%s \x01has donated \a3EFF3E%s\x01. The total amount raised is now \a3EFF3E%s\x01!", donation.name, szAmount, szTotal);
-	PrintToChatAll("\aE1C5F1%s: \x01\"%s\"", donation.name, donation.message);
-}
-
-static Action ConCmd_TestDonation(int client, int args)
+static Action HandleCommand_TestDonation(int client, int args)
 {
 	if (args < 1)
 	{
@@ -287,38 +326,23 @@ static Action ConCmd_TestDonation(int client, int args)
 	return Plugin_Handled;
 }
 
-static int FormatMoney(float amount, char[] buffer, int maxlength)
-{
-	char szAmount[16], szFormatted[16], szDecimal[16];
-	Format(szAmount, sizeof(szAmount), "%.2f", amount);
-	
-	int iDecimalPos = StrContains(szAmount, ".");
-	
-	if (iDecimalPos != -1)
-	{
-		strcopy(szDecimal, sizeof(szDecimal), szAmount[iDecimalPos]);
-		szAmount[iDecimalPos] = EOS;
-	}
-	else
-	{
-		szDecimal[0] = EOS;
-	}
-	
-	while (strlen(szAmount) > 3)
-	{
-		char szLastThree[4];
-		strcopy(szLastThree, sizeof(szLastThree), szAmount[strlen(szAmount) - 3]);
-		Format(szFormatted, sizeof(szFormatted), ",%s%s", szLastThree, szFormatted);
-		szAmount[strlen(szAmount) - 3] = EOS;
-	}
-	
-	return Format(buffer, maxlength, "$%s%s%s", szAmount, szFormatted, szDecimal);
-}
-
 static void OnPluginEnabled(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	if (g_bEnabled != convar.BoolValue)
 	{
 		TogglePlugin(convar.BoolValue);
 	}
+}
+
+static void OnGameEvent_teamplay_round_start(Event event, const char[] name, bool dontBroadcast)
+{
+	// Give the vscript enough time to initialize the text.
+	RequestFrame(OnRoundStarted);
+}
+
+static void OnRoundStarted()
+{
+	char message[16];
+	if (FormatMoney(g_nRaisedCents / 100.0, message, sizeof(message)))
+		UpdateDonationDisplays(message);
 }

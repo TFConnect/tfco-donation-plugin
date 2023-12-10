@@ -21,8 +21,7 @@ function OnGameEvent_teamplay_round_start(params)
 			origin = prop.GetOrigin(),
 			angles = prop.GetAbsAngles() + QAngle(0, 180, 0),
 		})
-
-		RepositionText(worldtext, prop)
+		
 		EntFireByHandle(worldtext, "SetParent", "!activator", -1, prop, null)
 	}
 
