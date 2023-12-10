@@ -16,8 +16,8 @@
 #define DONATION_API_URL	CAMPAIGN_API_URL ... "/donations"
 #define GOAL_API_URL		CAMPAIGN_API_URL ... "/goals"
 
-#define DONATION_API_MAX_NAME_LENGTH		33
-#define DONATION_API_MAX_MESSAGE_LENGTH		101
+#define DONATION_API_MAX_NAME_LENGTH		MAX_NAME_LENGTH
+#define DONATION_API_MAX_MESSAGE_LENGTH		500
 #define DONATION_API_TIME_FORMAT			"%Y-%m-%dT%H:%M:%S"
 
 #define CROAKER_MODEL	"models/props_tfconnect/festive_2023/croaker_pickup.mdl"
