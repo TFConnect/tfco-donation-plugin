@@ -8,7 +8,7 @@
 
 #define PLUGIN_VERSION	"1.0.1"
 
-#define TFCONNECT_TAG	"\x01[\x079E3083TFConnect\x01] "
+#define TFCONNECT_TAG	"\x01[\a9E3083TFConnect\x01] "
 
 #define DONATION_SCRIPT_FILE	"tfco_donations"
 
@@ -94,6 +94,8 @@ public void OnMapStart()
 	AddFileToDownloadsTable("models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush.vtf");
 	
 	PrecacheSound(CROAKER_SOUND);
+	
+	ServerCommand("script_execute %s", DONATION_SCRIPT_FILE);
 }
 
 public void OnConfigsExecuted()
@@ -120,7 +122,6 @@ void TogglePlugin(bool bEnable)
 	if (bEnable)
 	{
 		AddNormalSoundHook(OnSoundPlayed);
-		ServerCommand("script_execute %s", DONATION_SCRIPT_FILE);
 		HookEvent("teamplay_round_start", OnGameEvent_teamplay_round_start);
 		
 		tf_player_drop_bonus_ducks.IntValue = 1;
@@ -173,9 +174,10 @@ void OnDonationReceived(DonationData donation)
 	FormatMoney(donation.cents_amount / 100.0, szAmount, sizeof(szAmount));
 	FormatMoney(g_nRaisedCents / 100.0, szTotal, sizeof(szTotal));
 	
-	PrintToChatAll(TFCONNECT_TAG ... "\aE1C5F1%s \x01has donated \a3EFF3E%s\x01. The total amount raised is now \a3EFF3E%s\x01!", donation.name, szAmount, szTotal);
+	PrintToChatAll(TFCONNECT_TAG ... "\aE1C5F1%s \x01has donated \a3EFF3E%s\x01. We have raised \a3EFF3E%s\x01 for SpecialEffect!", donation.name, szAmount, szTotal);
 	
-	if (donation.message[0] != EOS)
+	// Blank message?
+	if (donation.message[0])
 		PrintToChatAll("\aE1C5F1%s: \x01\"%s\"", donation.name, donation.message);
 }
 

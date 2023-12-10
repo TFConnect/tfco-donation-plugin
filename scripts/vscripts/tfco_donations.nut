@@ -6,6 +6,9 @@ ClearGameEventCallbacks()
 
 function OnGameEvent_teamplay_round_start(params)
 {
+	if (!Convars.GetBool("sm_tfco_donation_enabled"))
+		return
+	
 	// Resupply Locker
 	local regenerate
 	while (regenerate = Entities.FindByClassname(regenerate, "func_regenerate"))
@@ -21,8 +24,9 @@ function OnGameEvent_teamplay_round_start(params)
 			origin = prop.GetOrigin(),
 			angles = prop.GetAbsAngles() + QAngle(0, 180, 0),
 		})
-		
+
 		EntFireByHandle(worldtext, "SetParent", "!activator", -1, prop, null)
+		AddThinkToEnt(worldtext, "ResupplyTextThink")
 	}
 
 	// Control Point
@@ -40,14 +44,28 @@ function OnGameEvent_teamplay_round_start(params)
 			origin = point.GetBoneOrigin(bone)
 		})
 		EntFireByHandle(worldtext, "SetParent", "!activator", -1, point, null)
-
 		AddThinkToEnt(worldtext, "ControlPointTextThink")
 	}
 }
 
 __CollectGameEventCallbacks(this)
 
-function ControlPointTextThink()
+::ResupplyTextThink <- function()
+{
+	local parent = NetProps.GetPropEntity(self, "m_hMoveParent")
+	if (parent == null)
+		return
+
+	CalcTextTotalSize(self)
+	local origin = parent.GetOrigin()
+	origin.z += parent.GetBoundingMaxsOriented().z + 10.0
+	origin += self.GetAbsAngles().Left() * TextSizeOutWidth * -0.5
+	self.SetAbsOrigin(origin)
+
+	return -1
+}
+
+::ControlPointTextThink <- function()
 {
 	local parent = NetProps.GetPropEntity(self, "m_hMoveParent")
 	if (parent == null)
@@ -64,28 +82,13 @@ function ControlPointTextThink()
 	return -1
 }
 
-function UpdateDonationDisplays(message)
+::UpdateDonationDisplays <- function(message)
 {
 	local worldtext
 	while (worldtext = Entities.FindByName(worldtext, TFCO_DONATION_TEXT_NAME))
 	{
 		worldtext.KeyValueFromString("message", message)
-
-		local parent = NetProps.GetPropEntity(worldtext, "m_hMoveParent")
-		if (parent == null)
-			continue
-
-		RepositionText(worldtext, parent)
 		DispatchParticleEffect("bday_confetti", worldtext.GetOrigin(), worldtext.GetAbsAngles() + Vector())
 		worldtext.EmitSound("Game.HappyBirthdayNoiseMaker")
 	}
-}
-
-function RepositionText(worldtext, parent)
-{
-	CalcTextTotalSize(worldtext)
-	local origin = parent.GetOrigin()
-	origin.z += parent.GetBoundingMaxsOriented().z + 10.0
-	origin += worldtext.GetAbsAngles().Left() * TextSizeOutWidth * -0.5
-	worldtext.SetAbsOrigin(origin)
 }
