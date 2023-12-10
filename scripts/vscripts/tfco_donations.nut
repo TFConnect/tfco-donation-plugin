@@ -8,7 +8,7 @@ function OnGameEvent_teamplay_round_start(params)
 {
 	if (!Convars.GetBool("sm_tfco_donation_enabled"))
 		return
-	
+
 	// Resupply Locker
 	local regenerate
 	while (regenerate = Entities.FindByClassname(regenerate, "func_regenerate"))
@@ -16,7 +16,7 @@ function OnGameEvent_teamplay_round_start(params)
 		local prop = NetProps.GetPropEntity(regenerate, "m_hAssociatedModel")
 		if (prop == null)
 			continue
-		
+
 		local worldtext = SpawnEntityFromTable("point_worldtext",
 		{
 			targetname = TFCO_DONATION_TEXT_NAME,
@@ -36,13 +36,14 @@ function OnGameEvent_teamplay_round_start(params)
 		local bone = point.LookupBone("spinner")
 		if (bone == -1)
 			continue
-		
+
 		local worldtext = SpawnEntityFromTable("point_worldtext",
 		{
 			targetname = TFCO_DONATION_TEXT_NAME,
 			textsize = "20",
 			origin = point.GetBoneOrigin(bone)
 		})
+
 		EntFireByHandle(worldtext, "SetParent", "!activator", -1, point, null)
 		AddThinkToEnt(worldtext, "ControlPointTextThink")
 	}
@@ -82,13 +83,20 @@ __CollectGameEventCallbacks(this)
 	return -1
 }
 
-::UpdateDonationDisplays <- function(message)
+::UpdateTextEntities <- function(message, silent)
 {
 	local worldtext
 	while (worldtext = Entities.FindByName(worldtext, TFCO_DONATION_TEXT_NAME))
 	{
 		worldtext.KeyValueFromString("message", message)
-		DispatchParticleEffect("bday_confetti", worldtext.GetOrigin(), worldtext.GetAbsAngles() + Vector())
-		worldtext.EmitSound("Game.HappyBirthdayNoiseMaker")
+
+		CalcTextTotalSize(worldtext)
+		local origin = worldtext.GetOrigin() - worldtext.GetAbsAngles().Left() * TextSizeOutWidth * -0.5
+
+		if (!silent)
+		{
+			DispatchParticleEffect("bday_confetti", origin, worldtext.GetAbsAngles() + Vector())
+			worldtext.EmitSound("Game.HappyBirthdayNoiseMaker")
+		}
 	}
 }

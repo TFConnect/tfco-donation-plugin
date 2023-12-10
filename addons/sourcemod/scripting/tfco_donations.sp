@@ -6,7 +6,7 @@
 #include <sdkhooks>
 #include <ripext>
 
-#define PLUGIN_VERSION	"1.0.2"
+#define PLUGIN_VERSION	"1.0.3"
 
 #define TFCONNECT_TAG	"\x01[\a9E3083TFConnect\x01] "
 
@@ -132,6 +132,7 @@ void TogglePlugin(bool bEnable)
 	else
 	{
 		RemoveNormalSoundHook(OnSoundPlayed);
+		UnhookEvent("teamplay_round_start", OnGameEvent_teamplay_round_start);
 		
 		tf_player_drop_bonus_ducks.RestoreDefault();
 		
@@ -181,10 +182,15 @@ void OnDonationReceived(DonationData donation)
 		PrintToChatAll("\aE1C5F1%s: \x01\"%s\"", donation.name, donation.message);
 }
 
-void UpdateDonationDisplays(char[] message)
+void OnTotalUpdated(int amount, bool bSilent = false)
 {
+	char message[16];
+	if (!FormatMoney(amount / 100.0, message, sizeof(message)))
+		return;
+	
+	// Update donation displays.
 	char szScriptCode[256];
-	Format(szScriptCode, sizeof(szScriptCode), "UpdateDonationDisplays(\"%s\")", message);
+	Format(szScriptCode, sizeof(szScriptCode), "UpdateTextEntities(\"%s\", %s)", message, bSilent ? "true" : "false");
 	
 	SetVariantString(szScriptCode);
 	AcceptEntityInput(0, "RunScriptCode");
@@ -214,20 +220,20 @@ static Action Timer_RequestDonations(Handle timer)
 	// Query the campaign details first.
 	// Once that succeeds, we know that we can fetch current donations and goals.
 	HTTPRequest request = new HTTPRequest(CAMPAIGN_API_URL);
-	request.Get(OnCampaignGetRequest);
+	request.Get(GET_ActiveCampaign);
 	
 	return Plugin_Continue;
 }
 
 // /api/campaigns/active
-static void OnCampaignGetRequest(HTTPResponse response, any value)
+static void GET_ActiveCampaign(HTTPResponse response, any value)
 {
 	if (!g_bEnabled)
 		return;
 	
 	if (response.Status != HTTPStatus_OK)
 	{
-		LogError("OnCampaignGetRequest: Failed with status %d", response.Status);
+		LogError("GET_ActiveCampaign: Failed with status %d", response.Status);
 		return;
 	}
 	
@@ -246,27 +252,24 @@ static void OnCampaignGetRequest(HTTPResponse response, any value)
 	if (raised_cents != g_nRaisedCents)
 	{
 		g_nRaisedCents = raised_cents;
-		
-		char message[16];
-		if (FormatMoney(raised_cents / 100.0, message, sizeof(message)))
-			UpdateDonationDisplays(message);
+		OnTotalUpdated(raised_cents);
 	}
 	
 	// Now, query donations.
 	HTTPRequest request = new HTTPRequest(DONATION_API_URL);
 	request.AppendQueryParam("after_time", "%d", g_iLastCheckedTimestamp);
-	request.Get(OnDonationGetRequest);
+	request.Get(GET_Donations);
 }
 
 // /api/campaigns/active/donations
-static void OnDonationGetRequest(HTTPResponse response, any value)
+static void GET_Donations(HTTPResponse response, any value)
 {
 	if (!g_bEnabled)
 		return;
 	
 	if (response.Status != HTTPStatus_OK)
 	{
-		LogError("OnDonationGetRequest: Failed with status %d", response.Status);
+		LogError("GET_Donations: Failed with status %d", response.Status);
 		return;
 	}
 	
@@ -319,11 +322,8 @@ static Action HandleCommand_TestDonation(int client, int args)
 	
 	g_nRaisedCents += donation.cents_amount;
 	
-	char message[64];
-	if (FormatMoney(g_nRaisedCents / 100.0, message, sizeof(message)))
-		UpdateDonationDisplays(message);
-	
 	OnDonationReceived(donation);
+	OnTotalUpdated(g_nRaisedCents);
 	
 	return Plugin_Handled;
 }
@@ -344,7 +344,5 @@ static void OnGameEvent_teamplay_round_start(Event event, const char[] name, boo
 
 static void OnRoundStarted()
 {
-	char message[16];
-	if (FormatMoney(g_nRaisedCents / 100.0, message, sizeof(message)))
-		UpdateDonationDisplays(message);
+	OnTotalUpdated(g_nRaisedCents, true);
 }
