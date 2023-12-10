@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        sourcemod-version: [ '1.11' ]
+        sourcemod-version: [ '1.12' ]
 
     steps:
       - name: Checkout repository
