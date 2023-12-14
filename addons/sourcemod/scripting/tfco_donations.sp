@@ -29,8 +29,8 @@ ConVar sm_tfco_donation_request_interval;
 ConVar tf_player_drop_bonus_ducks;
 
 bool g_bEnabled;
-int g_nRaisedCents;
-int g_iLastCheckedTimestamp;
+int g_nTotalRaisedCents;
+int g_iLastDonationReceivedTime;
 Handle g_hRequestTimer;
 
 enum struct DonationData
@@ -38,6 +38,7 @@ enum struct DonationData
 	char name[DONATION_API_MAX_NAME_LENGTH];
 	char message[DONATION_API_MAX_MESSAGE_LENGTH];
 	int cents_amount;
+	int campaign_total;
 	int time;
 	
 	bool InitFromJSON(JSONObject data)
@@ -48,6 +49,7 @@ enum struct DonationData
 		data.GetString("message", this.message, sizeof(this.message));
 		
 		this.cents_amount = data.GetInt("cents_amount");
+		this.campaign_total = data.GetInt("campaign_total");
 		
 		char time[32];
 		if (data.GetString("time", time, sizeof(time)))
@@ -76,7 +78,7 @@ public void OnPluginStart()
 	
 	RegAdminCmd("sm_tfco_test_donation", HandleCommand_TestDonation, ADMFLAG_CHEATS);
 	
-	g_iLastCheckedTimestamp = GetTime();
+	g_iLastDonationReceivedTime = GetTime();
 }
 
 public void OnMapStart()
@@ -142,10 +144,11 @@ void TogglePlugin(bool bEnable)
 	g_bEnabled = bEnable;
 }
 
-int FormatMoney(float amount, char[] buffer, int maxlength)
+bool FormatMoney(float amount, char[] buffer, int maxlength, int decimals = 2)
 {
-	char szAmount[16], szFormatted[16], szDecimal[16];
-	Format(szAmount, sizeof(szAmount), "%.2f", amount);
+	char szAmount[16], szFormatted[16], szDecimal[16], szFormat[8];
+	Format(szFormat, sizeof(szFormat), "%%.%df", decimals);
+	Format(szAmount, sizeof(szAmount), szFormat, amount);
 	
 	int iDecimalPos = StrContains(szAmount, ".");
 	if (iDecimalPos != -1)
@@ -166,14 +169,14 @@ int FormatMoney(float amount, char[] buffer, int maxlength)
 		szAmount[strlen(szAmount) - 3] = EOS;
 	}
 	
-	return Format(buffer, maxlength, "$%s%s%s", szAmount, szFormatted, szDecimal);
+	return Format(buffer, maxlength, "$%s%s%s", szAmount, szFormatted, szDecimal) != 0;
 }
 
 void OnDonationReceived(DonationData donation)
 {
 	char szAmount[16], szTotal[16];
 	FormatMoney(donation.cents_amount / 100.0, szAmount, sizeof(szAmount));
-	FormatMoney(g_nRaisedCents / 100.0, szTotal, sizeof(szTotal));
+	FormatMoney(donation.campaign_total / 100.0, szTotal, sizeof(szTotal), 0);
 	
 	PrintToChatAll(TFCONNECT_TAG ... "\aE1C5F1%s \x01has donated \a3EFF3E%s\x01. We have raised \a3EFF3E%s\x01 for SpecialEffect!", donation.name, szAmount, szTotal);
 	
@@ -185,10 +188,10 @@ void OnDonationReceived(DonationData donation)
 void OnTotalUpdated(int amount, bool bSilent = false)
 {
 	char message[16];
-	if (!FormatMoney(amount / 100.0, message, sizeof(message)))
+	if (!FormatMoney(amount / 100.0, message, sizeof(message), 0))
 		return;
 	
-	// Update donation displays.
+	// Update donation displays
 	char szScriptCode[256];
 	Format(szScriptCode, sizeof(szScriptCode), "UpdateTextEntities(\"%s\", %s)", message, bSilent ? "true" : "false");
 	
@@ -217,10 +220,14 @@ static Action Timer_RequestDonations(Handle timer)
 	if (g_hRequestTimer != timer)
 		return Plugin_Stop;
 	
-	// Query the campaign details first.
-	// Once that succeeds, we know that we can fetch current donations and goals.
+	// Fetch campaign total
 	HTTPRequest request = new HTTPRequest(CAMPAIGN_API_URL);
 	request.Get(GET_ActiveCampaign);
+	
+	// Check incoming donations
+	request = new HTTPRequest(DONATION_API_URL);
+	request.AppendQueryParam("after_time", "%d", g_iLastDonationReceivedTime);
+	request.Get(GET_Donations);
 	
 	return Plugin_Continue;
 }
@@ -249,16 +256,11 @@ static void GET_ActiveCampaign(HTTPResponse response, any value)
 			LogMessage("Retrieved campaign details for '%s': %d / %d raised", title, raised_cents, goal_cents);
 	}
 	
-	if (raised_cents != g_nRaisedCents)
+	if (raised_cents != g_nTotalRaisedCents)
 	{
-		g_nRaisedCents = raised_cents;
+		g_nTotalRaisedCents = raised_cents;
 		OnTotalUpdated(raised_cents);
 	}
-	
-	// Now, query donations.
-	HTTPRequest request = new HTTPRequest(DONATION_API_URL);
-	request.AppendQueryParam("after_time", "%d", g_iLastCheckedTimestamp);
-	request.Get(GET_Donations);
 }
 
 // /api/campaigns/active/donations
@@ -273,27 +275,26 @@ static void GET_Donations(HTTPResponse response, any value)
 		return;
 	}
 	
-	// Store at which time we checked donations
-	g_iLastCheckedTimestamp = GetTime();
-	
-	JSONArray hResponseDataArray = view_as<JSONArray>(view_as<JSONObject>(response.Data).Get("data"));
+	JSONArray data_array = view_as<JSONArray>(view_as<JSONObject>(response.Data).Get("data"));
 	
 	// No new donations!
-	if (hResponseDataArray.Length == 0)
+	if (data_array.Length == 0)
 		return;
 	
-	for (int i = 0; i < hResponseDataArray.Length; i++)
+	g_iLastDonationReceivedTime = GetTime();
+	
+	for (int i = 0; i < data_array.Length; i++)
 	{
-		JSONObject hDonationData = view_as<JSONObject>(hResponseDataArray.Get(i));
+		JSONObject data = view_as<JSONObject>(data_array.Get(i));
 		
 		DonationData donation;
-		if (donation.InitFromJSON(hDonationData))
+		if (donation.InitFromJSON(data))
 		{
 			if (sm_tfco_donation_debug.BoolValue)
 			{
-				char szLogMsg[2048];
-				if (hDonationData.ToString(szLogMsg, sizeof(szLogMsg), JSON_INDENT(4)))
-					LogMessage("Received donation:\n%s", szLogMsg);
+				char log[2048];
+				if (data.ToString(log, sizeof(log), JSON_INDENT(4)))
+					LogMessage("Received donation:\n%s", log);
 			}
 			
 			OnDonationReceived(donation);
@@ -318,12 +319,11 @@ static Action HandleCommand_TestDonation(int client, int args)
 		GetCmdArg(2, donation.message, sizeof(donation.message));
 	
 	donation.cents_amount = GetCmdArgInt(1);
+	donation.campaign_total = g_nTotalRaisedCents + donation.cents_amount;
 	donation.time = GetTime();
 	
-	g_nRaisedCents += donation.cents_amount;
-	
 	OnDonationReceived(donation);
-	OnTotalUpdated(g_nRaisedCents);
+	OnTotalUpdated(donation.campaign_total);
 	
 	return Plugin_Handled;
 }
@@ -338,11 +338,11 @@ static void OnPluginEnabled(ConVar convar, const char[] oldValue, const char[] n
 
 static void OnGameEvent_teamplay_round_start(Event event, const char[] name, bool dontBroadcast)
 {
-	// Give the vscript enough time to initialize the text.
+	// Give the vscript enough time to initialize the text
 	RequestFrame(OnRoundStarted);
 }
 
 static void OnRoundStarted()
 {
-	OnTotalUpdated(g_nRaisedCents, true);
+	OnTotalUpdated(g_nTotalRaisedCents, true);
 }
