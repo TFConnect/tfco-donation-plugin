@@ -96,7 +96,6 @@ public void OnMapStart()
 	AddFileToDownloadsTable("materials/models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush.vtf");
 	
 	AddFileToDownloadsTable("sound/" ... CROAKER_SOUND);
-	PrecacheSound(")" ... CROAKER_SOUND);
 	
 	ServerCommand("script_execute %s", DONATION_SCRIPT_FILE);
 }
@@ -207,9 +206,18 @@ static void OnDuckSpawnPost(int entity)
 
 static Action OnSoundPlayed(int clients[MAXPLAYERS], int &numClients, char sample[PLATFORM_MAX_PATH], int &entity, int &channel, float &volume, int &level, int &pitch, int &flags, char soundEntry[PLATFORM_MAX_PATH], int &seed)
 {
-	if (strncmp(sample, ")ambient_mp3/bumper_car_quack", 29) == 0)
+	if (StrContains(sample, "ambient_mp3/bumper_car_quack") != -1)
 	{
-		strcopy(sample, sizeof(sample), CROAKER_SOUND);
+		if (sample[0] == ')')
+		{
+			Format(sample, sizeof(sample), "%c%s", sample[0], CROAKER_SOUND);
+		}
+		else
+		{
+			strcopy(sample, sizeof(sample), CROAKER_SOUND);
+		}
+		
+		PrecacheSound(sample);
 		return Plugin_Changed;
 	}
 	
