@@ -91,9 +91,9 @@ public void OnMapStart()
 	AddFileToDownloadsTable("models/props_tfconnect/festive_2023/croaker_pickup.phy");
 	PrecacheModel(CROAKER_MODEL);
 	
-	AddFileToDownloadsTable("models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush.vmt");
-	AddFileToDownloadsTable("models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush_nm.vtf");
-	AddFileToDownloadsTable("models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush.vtf");
+	AddFileToDownloadsTable("materials/models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush.vmt");
+	AddFileToDownloadsTable("materials/models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush_nm.vtf");
+	AddFileToDownloadsTable("materials/models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush.vtf");
 	
 	AddFileToDownloadsTable("sound/" ... CROAKER_SOUND);
 	PrecacheSound(")" ... CROAKER_SOUND);
