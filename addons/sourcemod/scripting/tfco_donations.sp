@@ -95,7 +95,7 @@ public void OnMapStart()
 	AddFileToDownloadsTable("models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush_nm.vtf");
 	AddFileToDownloadsTable("models/props_tfconnect/festive_2023/croaker_pickup/croaker_plush.vtf");
 	
-	AddFileToDownloadsTable(CROAKER_SOUND);
+	AddFileToDownloadsTable("sound/" ... CROAKER_SOUND);
 	PrecacheSound(")" ... CROAKER_SOUND);
 	
 	ServerCommand("script_execute %s", DONATION_SCRIPT_FILE);
