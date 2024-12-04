@@ -1,55 +1,64 @@
 IncludeScript("worldtext_center")
 
 const TFCO_DONATION_TEXT_NAME = "tfco_donation_text"
+const TFCO_DONATION_TEXT_SIZE = 20
 
-ClearGameEventCallbacks()
-
-function OnGameEvent_teamplay_round_start(params)
+local EventsID = UniqueString()
+getroottable()[EventsID] <- 
 {
-	if (!Convars.GetBool("sm_tfco_donation_enabled"))
-		return
-
-	// Resupply Locker
-	local regenerate
-	while (regenerate = Entities.FindByClassname(regenerate, "func_regenerate"))
+	OnGameEvent_scorestats_accumulated_update = function(params)
 	{
-		local prop = NetProps.GetPropEntity(regenerate, "m_hAssociatedModel")
-		if (prop == null)
-			continue
-
-		local worldtext = SpawnEntityFromTable("point_worldtext",
-		{
-			targetname = TFCO_DONATION_TEXT_NAME,
-			textsize = "20",
-			origin = prop.GetOrigin(),
-			angles = prop.GetAbsAngles() + QAngle(0, 180, 0),
-		})
-
-		EntFireByHandle(worldtext, "SetParent", "!activator", -1, prop, null)
-		AddThinkToEnt(worldtext, "ResupplyTextThink")
+		delete getroottable()[EventsID]
 	}
 
-	// Control Point
-	local point
-	while (point = Entities.FindByClassname(point, "team_control_point"))
+	OnGameEvent_teamplay_round_start = function(params)
 	{
-		local bone = point.LookupBone("spinner")
-		if (bone == -1)
-			continue
+		if (!Convars.GetBool("sm_tfco_donation_enabled"))
+			return
 
-		local worldtext = SpawnEntityFromTable("point_worldtext",
+		// Resupply Locker
+		local regenerate
+		while (regenerate = Entities.FindByClassname(regenerate, "func_regenerate"))
 		{
-			targetname = TFCO_DONATION_TEXT_NAME,
-			textsize = "20",
-			origin = point.GetBoneOrigin(bone)
-		})
+			local prop = NetProps.GetPropEntity(regenerate, "m_hAssociatedModel")
+			if (prop == null)
+				continue
 
-		EntFireByHandle(worldtext, "SetParent", "!activator", -1, point, null)
-		AddThinkToEnt(worldtext, "ControlPointTextThink")
+			local worldtext = SpawnEntityFromTable("point_worldtext",
+			{
+				targetname = TFCO_DONATION_TEXT_NAME,
+				textsize = TFCO_DONATION_TEXT_SIZE,
+				origin = prop.GetOrigin(),
+				angles = prop.GetAbsAngles() + QAngle(0, 180, 0),
+			})
+
+			EntFireByHandle(worldtext, "SetParent", "!activator", -1, prop, null)
+			AddThinkToEnt(worldtext, "ResupplyTextThink")
+		}
+
+		// Control Point
+		local point
+		while (point = Entities.FindByClassname(point, "team_control_point"))
+		{
+			local bone = point.LookupBone("spinner")
+			if (bone == -1)
+				continue
+
+			local worldtext = SpawnEntityFromTable("point_worldtext",
+			{
+				targetname = TFCO_DONATION_TEXT_NAME,
+				textsize = TFCO_DONATION_TEXT_SIZE,
+				origin = point.GetBoneOrigin(bone)
+			})
+
+			EntFireByHandle(worldtext, "SetParent", "!activator", -1, point, null)
+			AddThinkToEnt(worldtext, "ControlPointTextThink")
+		}
 	}
 }
-
-__CollectGameEventCallbacks(this)
+local EventsTable = getroottable()[EventsID]
+foreach (name, callback in EventsTable) EventsTable[name] = callback.bindenv(this)
+__CollectGameEventCallbacks(EventsTable)
 
 ::ResupplyTextThink <- function()
 {
