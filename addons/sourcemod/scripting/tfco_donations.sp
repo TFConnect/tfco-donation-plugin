@@ -6,7 +6,7 @@
 #include <sdkhooks>
 #include <ripext>
 
-#define PLUGIN_VERSION	"1.0.3"
+#define PLUGIN_VERSION	"1.0.4"
 
 #define TFCONNECT_TAG	"\x01[\a9E3083TFConnect\x01] "
 
@@ -97,7 +97,8 @@ public void OnMapStart()
 	
 	AddFileToDownloadsTable("sound/" ... CROAKER_SOUND);
 	
-	ServerCommand("script_execute %s", DONATION_SCRIPT_FILE);
+	SetVariantString(DONATION_SCRIPT_FILE);
+	AcceptEntityInput(0, "RunScriptFile");
 }
 
 public void OnConfigsExecuted()

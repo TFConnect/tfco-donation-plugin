@@ -6,11 +6,6 @@ const TFCO_DONATION_TEXT_SIZE = 20
 local EventsID = UniqueString()
 getroottable()[EventsID] <- 
 {
-	OnGameEvent_scorestats_accumulated_update = function(params)
-	{
-		delete getroottable()[EventsID]
-	}
-
 	OnGameEvent_teamplay_round_start = function(params)
 	{
 		if (!Convars.GetBool("sm_tfco_donation_enabled"))
