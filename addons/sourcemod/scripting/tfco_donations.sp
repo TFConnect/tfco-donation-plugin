@@ -97,8 +97,7 @@ public void OnMapStart()
 	
 	AddFileToDownloadsTable("sound/" ... CROAKER_SOUND);
 	
-	SetVariantString(DONATION_SCRIPT_FILE);
-	AcceptEntityInput(0, "RunScriptFile");
+	ServerCommand("script_execute %s", DONATION_SCRIPT_FILE);
 }
 
 public void OnConfigsExecuted()
