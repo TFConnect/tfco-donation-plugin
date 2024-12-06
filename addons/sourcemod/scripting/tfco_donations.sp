@@ -195,8 +195,7 @@ void OnTotalUpdated(int amount, bool bSilent = false)
 	char szScriptCode[256];
 	Format(szScriptCode, sizeof(szScriptCode), "UpdateTextEntities(\"%s\", %s)", message, bSilent ? "true" : "false");
 	
-	SetVariantString(szScriptCode);
-	AcceptEntityInput(0, "RunScriptCode");
+	ServerCommand("script %s", szScriptCode);
 }
 
 static void OnDuckSpawnPost(int entity)
