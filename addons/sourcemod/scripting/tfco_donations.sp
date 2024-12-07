@@ -182,7 +182,7 @@ void OnDonationReceived(DonationData donation)
 	
 	// Blank message?
 	if (donation.message[0])
-		PrintToChatAll("\aE1C5F1%s: \x01\"%s\"", donation.name, donation.message);
+		PrintToChatAll("\aE1C5F1%s\x01: \"%s\"", donation.name, donation.message);
 }
 
 void OnTotalUpdated(int amount, bool bSilent = false)
