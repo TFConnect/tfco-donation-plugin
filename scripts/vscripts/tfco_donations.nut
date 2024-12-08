@@ -11,7 +11,7 @@ getroottable()[EventsID] <-
 		if (!Convars.GetBool("sm_tfco_donation_enabled"))
 			return
 
-		// Resupply Locker
+		// Resupply locker (static text)
 		local regenerate
 		while (regenerate = Entities.FindByClassname(regenerate, "func_regenerate"))
 		{
@@ -31,7 +31,7 @@ getroottable()[EventsID] <-
 			AddThinkToEnt(worldtext, "ResupplyTextThink")
 		}
 
-		// Control Point
+		// Control point (rotating text)
 		local point
 		while (point = Entities.FindByClassname(point, "team_control_point"))
 		{
@@ -45,6 +45,10 @@ getroottable()[EventsID] <-
 				textsize = TFCO_DONATION_TEXT_SIZE,
 				origin = point.GetBoneOrigin(bone)
 			})
+
+			// For smoother bone updates
+			NetProps.SetPropBool(point, "m_bUseClientSideAnimation", false)
+			AddThinkToEnt(point, "ControlPointThink")
 
 			EntFireByHandle(worldtext, "SetParent", "!activator", -1, point, null)
 			AddThinkToEnt(worldtext, "ControlPointTextThink")
@@ -67,6 +71,12 @@ __CollectGameEventCallbacks(EventsTable)
 	origin += self.GetAbsAngles().Left() * TextSizeOutWidth * -0.5
 	self.SetAbsOrigin(origin)
 
+	return -1
+}
+
+::ControlPointThink <- function()
+{
+	self.StudioFrameAdvance()
 	return -1
 }
 
